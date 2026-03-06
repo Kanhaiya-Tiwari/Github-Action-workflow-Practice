@@ -3,10 +3,11 @@ name: Self Hosted Runner Test
 on: workflow_dispatch
 
 jobs:
-  self-hosted-job:
-    runs-on: self-hosted
+  test:
+    runs-on: [self-hosted, my-linux-runner]
 
     steps:
+      - run: hostname
       - name: Show hostname
         run: hostname
 
