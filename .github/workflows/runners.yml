@@ -1,0 +1,38 @@
+name: Runner OS Test
+
+on: push
+
+jobs:
+
+  ubuntu-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show system info
+        run: |
+          echo "OS:"
+          uname -a
+          echo "Hostname:"
+          hostname
+          echo "Current User:"
+          whoami
+
+  windows-job:
+    runs-on: windows-latest
+    steps:
+      - name: Show system info
+        run: |
+          echo OS
+          hostname
+          whoami
+
+  mac-job:
+    runs-on: macos-latest
+    steps:
+      - name: Show system info
+        run: |
+          echo "OS:"
+          uname -a
+          echo "Hostname:"
+          hostname
+          echo "Current User:"
+          whoami
