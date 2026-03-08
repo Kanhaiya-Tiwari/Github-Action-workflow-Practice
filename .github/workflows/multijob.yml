@@ -1,0 +1,32 @@
+name: Multi job workflow
+
+on:
+    push:
+        branches: [main]
+
+jobs:
+    
+    code:
+        runs-on: ubuntu-latest
+        steps:
+            - name: code checkout
+              uses: actions/checkout@v4
+
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: docker image build
+              run: echo "docker image building"
+              
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: code test with trivy and dry run
+              run: echo "code test with trivy and dry run"
+              
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: deploy to cloud
+              run: echo "deploy with docker compose"          
+
