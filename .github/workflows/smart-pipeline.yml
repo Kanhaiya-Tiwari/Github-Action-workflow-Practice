@@ -30,3 +30,6 @@ jobs:
           else
             echo "Feature branch push"
           fi
+      - name: Print commit message
+        run: |
+          echo "Commit message: ${{ github.event.head_commit.message }}"    

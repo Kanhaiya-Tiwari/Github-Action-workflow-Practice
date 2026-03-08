@@ -1,255 +1,429 @@
-# Day 42 – Runners: GitHub-Hosted & Self-Hosted
 
-Today I learned about **GitHub Actions runners**, which are machines that execute workflow jobs.
-GitHub provides **hosted runners**, and developers can also configure **self-hosted runners** on their own machines or cloud servers.
+# Day 43 – Jobs, Steps, Environment Variables & Conditionals
 
-Understanding runners is important because every CI/CD pipeline needs a machine to execute the workflow steps.
+## Overview
+
+Today I learned how to control the flow of a GitHub Actions pipeline.
+A workflow can contain multiple jobs, and each job contains multiple steps.
+Using job dependencies, environment variables, outputs, and conditions, we can control how and when different parts of the pipeline run.
+
+These concepts are important because real CI/CD pipelines must coordinate many tasks such as building code, running tests, and deploying applications.
 
 ---
 
-# Task 1 – GitHub-Hosted Runners
+# 1. Multi-Job Workflow
 
-I created a workflow that runs three jobs on different operating systems.
+A workflow can contain multiple jobs.
+Each job runs on its own runner (virtual machine).
 
-Supported runners:
-
-* ubuntu-latest
-* windows-latest
-* macos-latest
-
-### Workflow File
+Example workflow:
 
 ```
-.github/workflows/runners.yml
+build → test → deploy
 ```
 
-### YAML
+### Workflow Example
 
 ```yaml
-name: Runner OS Test
+name: Multi Job Pipeline
 
 on: push
 
 jobs:
 
-  ubuntu-job:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Print system info
-        run: |
-          echo "Operating System:"
-          uname -a
-          echo "Hostname:"
-          hostname
-          echo "Current User:"
-          whoami
+      - name: Build step
+        run: echo "Building the app"
 
-  windows-job:
-    runs-on: windows-latest
+  test:
+    runs-on: ubuntu-latest
+    needs: build
     steps:
-      - name: Print system info
-        run: |
-          echo OS Info
-          hostname
-          whoami
+      - name: Test step
+        run: echo "Running tests"
 
-  macos-job:
-    runs-on: macos-latest
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
     steps:
-      - name: Print system info
-        run: |
-          echo "Operating System:"
-          uname -a
-          echo "Hostname:"
-          hostname
-          echo "Current User:"
-          whoami
+      - name: Deploy step
+        run: echo "Deploying"
 ```
 
-### What is a GitHub-hosted runner?
+### Explanation
 
-A **GitHub-hosted runner** is a virtual machine provided and managed by GitHub that executes workflow jobs.
+**build job**
 
-### Who manages it?
+Runs first and simulates building the application.
 
-GitHub manages:
+```
+echo "Building the app"
+```
 
-* Infrastructure
-* Operating system updates
-* Installed software
-* Security patches
-* Cleanup after job completion
+**test job**
 
-Developers only need to define the workflow.
+Uses:
+
+```
+needs: build
+```
+
+This means the test job will run **only after the build job succeeds**.
+
+**deploy job**
+
+Uses:
+
+```
+needs: test
+```
+
+This means deployment will only run after testing finishes successfully.
+
+### Pipeline Flow
+
+```
+build
+   ↓
+test
+   ↓
+deploy
+```
+
+This dependency chain ensures that the application is not deployed unless the build and tests succeed.
 
 ---
 
-# Task 2 – Exploring Pre-installed Tools
+# 2. Environment Variables
 
-GitHub runners come with many tools already installed.
+Environment variables store values that can be reused across the workflow.
 
-I ran commands to check installed tools.
+They can be defined at three levels:
+
+1. Workflow level
+2. Job level
+3. Step level
+
+Example workflow:
 
 ```yaml
+name: Environment Variables Demo
+
+on: push
+
+env:
+  APP_NAME: myapp
+
 jobs:
-  check-tools:
+  show-env:
+    runs-on: ubuntu-latest
+
+    env:
+      ENVIRONMENT: staging
+
+    steps:
+      - name: Print environment variables
+        env:
+          VERSION: 1.0.0
+        run: |
+          echo "App Name: $APP_NAME"
+          echo "Environment: $ENVIRONMENT"
+          echo "Version: $VERSION"
+
+      - name: GitHub context variables
+        run: |
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
+```
+
+### Variable Levels
+
+**Workflow Level**
+
+```
+env:
+  APP_NAME: myapp
+```
+
+Accessible in all jobs and steps.
+
+**Job Level**
+
+```
+ENVIRONMENT: staging
+```
+
+Accessible only within that specific job.
+
+**Step Level**
+
+```
+VERSION: 1.0.0
+```
+
+Accessible only in that step.
+
+### GitHub Context Variables
+
+GitHub automatically provides useful variables.
+
+Examples:
+
+```
+github.sha
+github.actor
+```
+
+Meaning:
+
+* **github.sha** → commit ID that triggered the workflow
+* **github.actor** → the user who triggered the workflow
+
+---
+
+# 3. Job Outputs
+
+Jobs run on separate virtual machines, so they cannot directly share data.
+To pass information between jobs we use **job outputs**.
+
+### Example
+
+First job generates a value (today's date).
+Second job reads and prints that value.
+
+```yaml
+name: Job Output Example
+
+on: push
+
+jobs:
+
+  generate-date:
+    runs-on: ubuntu-latest
+
+    outputs:
+      today: ${{ steps.date_step.outputs.today }}
+
+    steps:
+      - id: date_step
+        run: echo "today=$(date)" >> $GITHUB_OUTPUT
+
+  print-date:
+    runs-on: ubuntu-latest
+    needs: generate-date
+
+    steps:
+      - name: Print date
+        run: echo "Date from previous job: ${{ needs.generate-date.outputs.today }}"
+```
+
+### Explanation
+
+**Step Output**
+
+```
+echo "today=$(date)" >> $GITHUB_OUTPUT
+```
+
+Creates an output variable called `today`.
+
+**Job Output**
+
+```
+outputs:
+  today: ${{ steps.date_step.outputs.today }}
+```
+
+Exposes the step output as a job output.
+
+**Accessing Output**
+
+```
+${{ needs.generate-date.outputs.today }}
+```
+
+This retrieves the value from the previous job.
+
+### Why Outputs Are Useful
+
+In real pipelines outputs are used to pass information like:
+
+* Docker image tag
+* Build version
+* Artifact path
+* Deployment environment
+
+Example pipeline:
+
+```
+Build Job → generates image tag
+Deploy Job → deploys that tag
+```
+
+---
+
+# 4. Conditionals
+
+Conditionals control when jobs or steps should run.
+
+Example workflow:
+
+```yaml
+name: Conditional Workflow
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  example:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check installed tools
-        run: |
-          docker --version
-          python --version
-          node --version
-          git --version
-```
+      - name: Run only on main branch
+        if: github.ref == 'refs/heads/main'
+        run: echo "This runs only on main branch"
 
-### Why pre-installed tools matter
+      - name: Failing step
+        run: exit 1
+        continue-on-error: true
 
-Pre-installed tools reduce pipeline setup time.
+      - name: Run if previous step failed
+        if: failure()
+        run: echo "Previous step failed"
 
-Instead of installing tools every time, the runner already includes common development tools such as:
-
-* Docker
-* Python
-* Node.js
-* Git
-* Java
-* .NET
-
-This makes CI/CD pipelines faster and easier to maintain.
-
----
-
-# Task 3 – Setting Up a Self-Hosted Runner
-
-I configured a **self-hosted runner** connected to my GitHub repository.
-
-Steps:
-
-1. Go to **Repository Settings**
-2. Navigate to **Actions → Runners**
-3. Click **New self-hosted runner**
-4. Choose the operating system
-5. Download the runner package
-6. Configure the runner using the provided token
-7. Start the runner
-
-Example setup commands:
-
-```bash
-mkdir actions-runner
-cd actions-runner
-
-curl -o actions-runner-linux-x64.tar.gz -L https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
-
-tar xzf actions-runner-linux-x64.tar.gz
-
-./config.sh --url https://github.com/USERNAME/REPO --token TOKEN
-```
-
-Start the runner:
-
-```bash
-./run.sh
-```
-
-After starting the runner, GitHub shows it as **Idle** in the repository runners list.
-
----
-
-# Task 4 – Running Jobs on Self-Hosted Runner
-
-I created a workflow to run a job on my self-hosted runner.
-
-### Workflow File
-
-```
-.github/workflows/self-hosted.yml
-```
-
-### YAML
-
-```yaml
-name: Self Hosted Runner Test
-
-on: workflow_dispatch
-
-jobs:
-  self-hosted-job:
-    runs-on: self-hosted
+  push-only-job:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
 
     steps:
-      - name: Show hostname
-        run: hostname
-
-      - name: Show working directory
-        run: pwd
-
-      - name: Create test file
-        run: echo "Hello from self-hosted runner" > runner-test.txt
-
-      - name: List files
-        run: ls
+      - run: echo "Runs only on push events"
 ```
 
-After the workflow runs, the file **runner-test.txt** appears on my machine, proving the job executed on my local runner.
+### Explanation
+
+**Run only on main branch**
+
+```
+if: github.ref == 'refs/heads/main'
+```
+
+This step runs only when the workflow is triggered from the main branch.
 
 ---
 
-# Task 5 – Runner Labels
-
-Labels help target specific runners when multiple self-hosted runners are available.
-
-Example label:
+**Run step if previous step failed**
 
 ```
-my-linux-runner
+if: failure()
 ```
 
-Workflow example:
+This is useful for sending alerts or rollback operations.
+
+---
+
+**Run job only on push**
+
+```
+if: github.event_name == 'push'
+```
+
+Prevents the job from running on pull requests.
+
+---
+
+**continue-on-error**
+
+```
+continue-on-error: true
+```
+
+If this step fails, the workflow will continue instead of stopping.
+
+---
+
+# 5. Smart Pipeline Example
+
+This workflow combines everything learned.
 
 ```yaml
-runs-on: [self-hosted, my-linux-runner]
+name: Smart Pipeline
+
+on:
+  push:
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Running lint checks"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Running tests"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+
+    steps:
+      - name: Print branch info
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "Main branch push"
+          else
+            echo "Feature branch push"
+          fi
+
+      - name: Print commit message
+        run: echo "Commit message: ${{ github.event.head_commit.message }}"
 ```
 
-This ensures the job runs only on runners with that label.
+### Pipeline Execution
 
-### Why labels are useful
+```
+        push
+          │
+    ┌─────┴─────┐
+    │           │
+  lint        test
+    │           │
+    └─────┬─────┘
+          │
+       summary
+```
 
-Labels allow better control over which machine executes the job.
+**lint and test jobs run in parallel.**
 
-For example:
+The **summary job waits for both jobs to finish** using:
 
-* GPU runner
-* High-memory runner
-* Docker-enabled runner
-* Linux-specific runner
+```
+needs: [lint, test]
+```
 
-This is especially useful in large CI/CD environments.
+The summary job prints:
+
+* Whether the push was on the main branch or a feature branch
+* The commit message that triggered the pipeline
 
 ---
 
-# Task 6 – GitHub-Hosted vs Self-Hosted Runners
+# Key Concepts Learned
 
-| Feature             | GitHub-Hosted Runner               | Self-Hosted Runner                           |
-| ------------------- | ---------------------------------- | -------------------------------------------- |
-| Who manages it      | GitHub                             | Developer / Organization                     |
-| Cost                | Free minutes or paid usage         | Cost of your own server or VM                |
-| Pre-installed tools | Many tools already installed       | Must install manually                        |
-| Good for            | Standard CI/CD pipelines           | Custom infrastructure and advanced workloads |
-| Security concern    | Code runs on GitHub infrastructure | You must manage security and updates         |
+* Workflows can contain multiple jobs.
+* Jobs contain steps.
+* `needs:` controls job dependencies.
+* Environment variables allow sharing configuration values.
+* Outputs allow passing data between jobs.
+* Conditionals allow pipelines to run only when certain conditions are met.
 
 ---
 
-# Key Learnings
+# Conclusion
 
-Today I learned:
-
-* What **GitHub Actions runners** are
-* How **GitHub-hosted runners** work
-* How to configure a **self-hosted runner**
-* How to run workflows on my own machine
-* How **runner labels** help manage multiple runners
-* Differences between **GitHub-hosted and self-hosted runners**
-
+Today I learned how to design a smarter CI/CD pipeline by controlling job order, sharing data between jobs, and running steps conditionally.
+These features are essential for building production-grade DevOps pipelines.
