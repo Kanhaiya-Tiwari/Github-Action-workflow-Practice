@@ -2,7 +2,7 @@ name: Runner OS Test
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
