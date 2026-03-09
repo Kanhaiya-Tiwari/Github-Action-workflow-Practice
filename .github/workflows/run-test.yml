@@ -1,0 +1,18 @@
+name: Run Tests in CI
+
+on: push
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make script executable
+        run: chmod +x scripts/test.sh
+
+      - name: Run test script
+        run: ./scripts/test.sh
