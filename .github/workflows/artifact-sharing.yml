@@ -1,8 +1,10 @@
 name: Artifact Sharing Example
 
-on: push
+on:
+  workflow_dispatch:
+jobs:    
 
-jobs:
+
 
   generate-file:
     runs-on: ubuntu-latest

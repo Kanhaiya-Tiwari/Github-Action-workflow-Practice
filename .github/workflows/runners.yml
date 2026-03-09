@@ -1,12 +1,9 @@
 name: Runner OS Test
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
-
   ubuntu-job:
     runs-on: ubuntu-latest
     steps:
@@ -38,6 +35,8 @@ jobs:
           echo "Hostname:"
           hostname
           echo "Current User:"
+          whoami
+
   check-tools:
     runs-on: ubuntu-latest
 
@@ -47,4 +46,5 @@ jobs:
           docker --version
           python --version
           node --version
-          git --version          whoami
+          git --version
+          whoami

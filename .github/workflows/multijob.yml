@@ -1,8 +1,7 @@
 name: Multi job workflow
 
 on:
-    push:
-        branches: [master]
+    workflow_dispatch:
 
 jobs:
     

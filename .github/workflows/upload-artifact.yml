@@ -1,6 +1,7 @@
 name: Upload Artifact Example
 
-on: push
+on:
+  workflow_dispatch:
 
 jobs:
   create-report:

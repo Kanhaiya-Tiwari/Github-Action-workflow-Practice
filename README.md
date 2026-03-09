@@ -1,429 +1,524 @@
-
-# Day 43 – Jobs, Steps, Environment Variables & Conditionals
+# Day 44 – Secrets, Artifacts & Running Real Tests in CI
 
 ## Overview
 
-Today I learned how to control the flow of a GitHub Actions pipeline.
-A workflow can contain multiple jobs, and each job contains multiple steps.
-Using job dependencies, environment variables, outputs, and conditions, we can control how and when different parts of the pipeline run.
+In this exercise, the CI pipeline begins performing real tasks instead of simple echo commands.
 
-These concepts are important because real CI/CD pipelines must coordinate many tasks such as building code, running tests, and deploying applications.
+Today I learned how to:
+
+* Store sensitive information securely using **GitHub Secrets**
+* Use secrets safely in workflows
+* Save build outputs using **artifacts**
+* Share files between jobs
+* Run real scripts/tests inside CI
+* Improve pipeline speed using **caching**
+
+These features are essential for real-world CI/CD pipelines.
 
 ---
 
-# 1. Multi-Job Workflow
+# 1. GitHub Secrets
 
-A workflow can contain multiple jobs.
-Each job runs on its own runner (virtual machine).
+CI pipelines often require sensitive data such as:
 
-Example workflow:
+* API keys
+* Docker credentials
+* database passwords
+* cloud access tokens
+
+Hardcoding these values inside a workflow is dangerous because anyone with repository access could see them.
+
+GitHub solves this problem using **Secrets**.
+
+Secrets are encrypted values stored in the repository settings and accessed securely inside workflows.
+
+---
+
+## Creating a Secret
+
+Steps:
+
+1. Open your GitHub repository
+2. Go to **Settings**
+3. Click **Secrets and Variables**
+4. Select **Actions**
+5. Click **New Repository Secret**
+
+Create a secret:
 
 ```
-build → test → deploy
+Name: MY_SECRET_MESSAGE
+Value: hello-secret
 ```
 
-### Workflow Example
+---
+
+## Workflow Example
 
 ```yaml
-name: Multi Job Pipeline
+name: Secret Example
 
 on: push
 
 jobs:
-
-  build:
+  secret-check:
     runs-on: ubuntu-latest
-    steps:
-      - name: Build step
-        run: echo "Building the app"
 
-  test:
-    runs-on: ubuntu-latest
-    needs: build
     steps:
-      - name: Test step
-        run: echo "Running tests"
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Deploy step
-        run: echo "Deploying"
+      - name: Check if secret exists
+        run: |
+          if [ -n "${{ secrets.MY_SECRET_MESSAGE }}" ]; then
+            echo "The secret is set: true"
+          else
+            echo "The secret is missing"
+          fi
 ```
 
 ### Explanation
 
-**build job**
-
-Runs first and simulates building the application.
+Secret values are accessed using:
 
 ```
-echo "Building the app"
+${{ secrets.SECRET_NAME }}
 ```
 
-**test job**
-
-Uses:
+Example:
 
 ```
-needs: build
+${{ secrets.MY_SECRET_MESSAGE }}
 ```
 
-This means the test job will run **only after the build job succeeds**.
-
-**deploy job**
-
-Uses:
-
-```
-needs: test
-```
-
-This means deployment will only run after testing finishes successfully.
-
-### Pipeline Flow
-
-```
-build
-   ↓
-test
-   ↓
-deploy
-```
-
-This dependency chain ensures that the application is not deployed unless the build and tests succeed.
+The workflow checks whether the secret exists without printing its value.
 
 ---
 
-# 2. Environment Variables
+## What Happens if You Print a Secret?
 
-Environment variables store values that can be reused across the workflow.
-
-They can be defined at three levels:
-
-1. Workflow level
-2. Job level
-3. Step level
-
-Example workflow:
+Example:
 
 ```yaml
-name: Environment Variables Demo
+run: echo ${{ secrets.MY_SECRET_MESSAGE }}
+```
+
+GitHub automatically masks secrets in logs.
+
+Output example:
+
+```
+***
+```
+
+This prevents secrets from being exposed in CI logs.
+
+---
+
+## Why You Should Never Print Secrets
+
+Secrets should never appear in logs because:
+
+* Logs can be viewed by collaborators
+* Logs may be stored permanently
+* Attackers could steal credentials
+
+Therefore secrets should only be used internally by commands and never displayed.
+
+---
+
+# 2. Using Secrets as Environment Variables
+
+Secrets can be passed into steps as environment variables.
+
+Example:
+
+```yaml
+name: Secret Environment Variable
 
 on: push
 
-env:
-  APP_NAME: myapp
-
 jobs:
-  show-env:
+  secret-env:
     runs-on: ubuntu-latest
 
-    env:
-      ENVIRONMENT: staging
-
     steps:
-      - name: Print environment variables
+      - name: Use secret as environment variable
         env:
-          VERSION: 1.0.0
+          SECRET_MESSAGE: ${{ secrets.MY_SECRET_MESSAGE }}
         run: |
-          echo "App Name: $APP_NAME"
-          echo "Environment: $ENVIRONMENT"
-          echo "Version: $VERSION"
-
-      - name: GitHub context variables
-        run: |
-          echo "Commit SHA: ${{ github.sha }}"
-          echo "Triggered by: ${{ github.actor }}"
+          echo "Secret is configured and available"
 ```
 
-### Variable Levels
-
-**Workflow Level**
-
-```
-env:
-  APP_NAME: myapp
-```
-
-Accessible in all jobs and steps.
-
-**Job Level**
-
-```
-ENVIRONMENT: staging
-```
-
-Accessible only within that specific job.
-
-**Step Level**
-
-```
-VERSION: 1.0.0
-```
-
-Accessible only in that step.
-
-### GitHub Context Variables
-
-GitHub automatically provides useful variables.
-
-Examples:
-
-```
-github.sha
-github.actor
-```
-
-Meaning:
-
-* **github.sha** → commit ID that triggered the workflow
-* **github.actor** → the user who triggered the workflow
+The secret is available to the shell but not printed.
 
 ---
 
-# 3. Job Outputs
+## Docker Credentials
 
-Jobs run on separate virtual machines, so they cannot directly share data.
-To pass information between jobs we use **job outputs**.
+Create two secrets for future workflows:
 
-### Example
+```
+DOCKER_USERNAME
+DOCKER_TOKEN
+```
 
-First job generates a value (today's date).
-Second job reads and prints that value.
+These will later be used for:
+
+* logging into Docker Hub
+* pushing container images
+
+Example usage:
 
 ```yaml
-name: Job Output Example
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+```
+
+---
+
+# 3. Uploading Artifacts
+
+Artifacts are files generated during a workflow that you want to keep after the workflow finishes.
+
+Examples of artifacts:
+
+* test reports
+* build logs
+* compiled binaries
+* coverage reports
+
+Artifacts allow you to download these files from the GitHub Actions interface.
+
+---
+
+## Example Workflow
+
+```yaml
+name: Artifact Upload Example
 
 on: push
 
 jobs:
-
-  generate-date:
+  create-report:
     runs-on: ubuntu-latest
 
-    outputs:
-      today: ${{ steps.date_step.outputs.today }}
-
     steps:
-      - id: date_step
-        run: echo "today=$(date)" >> $GITHUB_OUTPUT
+      - name: Generate report
+        run: |
+          echo "Test Report" > report.txt
+          echo "All tests passed" >> report.txt
 
-  print-date:
-    runs-on: ubuntu-latest
-    needs: generate-date
-
-    steps:
-      - name: Print date
-        run: echo "Date from previous job: ${{ needs.generate-date.outputs.today }}"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: report.txt
 ```
 
 ### Explanation
 
-**Step Output**
+This step creates a file:
 
 ```
-echo "today=$(date)" >> $GITHUB_OUTPUT
+report.txt
 ```
 
-Creates an output variable called `today`.
-
-**Job Output**
+Then the artifact action uploads it:
 
 ```
-outputs:
-  today: ${{ steps.date_step.outputs.today }}
+actions/upload-artifact@v4
 ```
 
-Exposes the step output as a job output.
-
-**Accessing Output**
+Artifact details:
 
 ```
-${{ needs.generate-date.outputs.today }}
+name → test-report
+path → report.txt
 ```
 
-This retrieves the value from the previous job.
+---
 
-### Why Outputs Are Useful
+## Downloading Artifact from GitHub
 
-In real pipelines outputs are used to pass information like:
+After the workflow finishes:
 
-* Docker image tag
-* Build version
-* Artifact path
-* Deployment environment
+1. Open **Actions tab**
+2. Select the workflow run
+3. Scroll to **Artifacts**
+4. Download the file
+
+This allows you to inspect outputs from the pipeline.
+
+---
+
+# 4. Download Artifacts Between Jobs
+
+Artifacts can also be used to transfer files between jobs.
 
 Example pipeline:
 
 ```
-Build Job → generates image tag
-Deploy Job → deploys that tag
+Job 1 → build file
+Job 2 → use file
 ```
 
 ---
 
-# 4. Conditionals
-
-Conditionals control when jobs or steps should run.
-
-Example workflow:
+## Workflow Example
 
 ```yaml
-name: Conditional Workflow
+name: Artifact Sharing Example
 
-on:
-  push:
-  pull_request:
-
-jobs:
-  example:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Run only on main branch
-        if: github.ref == 'refs/heads/main'
-        run: echo "This runs only on main branch"
-
-      - name: Failing step
-        run: exit 1
-        continue-on-error: true
-
-      - name: Run if previous step failed
-        if: failure()
-        run: echo "Previous step failed"
-
-  push-only-job:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
-    steps:
-      - run: echo "Runs only on push events"
-```
-
-### Explanation
-
-**Run only on main branch**
-
-```
-if: github.ref == 'refs/heads/main'
-```
-
-This step runs only when the workflow is triggered from the main branch.
-
----
-
-**Run step if previous step failed**
-
-```
-if: failure()
-```
-
-This is useful for sending alerts or rollback operations.
-
----
-
-**Run job only on push**
-
-```
-if: github.event_name == 'push'
-```
-
-Prevents the job from running on pull requests.
-
----
-
-**continue-on-error**
-
-```
-continue-on-error: true
-```
-
-If this step fails, the workflow will continue instead of stopping.
-
----
-
-# 5. Smart Pipeline Example
-
-This workflow combines everything learned.
-
-```yaml
-name: Smart Pipeline
-
-on:
-  push:
+on: push
 
 jobs:
 
-  lint:
+  generate-file:
     runs-on: ubuntu-latest
-    steps:
-      - run: echo "Running lint checks"
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Running tests"
-
-  summary:
-    runs-on: ubuntu-latest
-    needs: [lint, test]
 
     steps:
-      - name: Print branch info
+      - name: Create file
+        run: echo "Hello from Job 1" > message.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-file
+          path: message.txt
+
+
+  read-file:
+    runs-on: ubuntu-latest
+    needs: generate-file
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-file
+
+      - name: Print file
+        run: cat message.txt
+```
+
+### Execution Flow
+
+```
+generate-file
+      ↓
+upload artifact
+      ↓
+read-file
+      ↓
+download artifact
+      ↓
+print contents
+```
+
+---
+
+## When Artifacts Are Used in Real Pipelines
+
+Artifacts are commonly used for:
+
+* sharing compiled builds
+* storing test reports
+* passing deployment packages
+* storing logs for debugging
+
+Example:
+
+```
+Build Job → generate Docker image
+Test Job → download build
+Deploy Job → deploy build
+```
+
+---
+
+# 5. Running Real Tests in CI
+
+A CI pipeline should verify code automatically.
+
+Example:
+
+```
+run script
+if script fails → pipeline fails
+```
+
+---
+
+## Example Script
+
+Create a script inside your repo.
+
+Example:
+
+```
+scripts/test.sh
+```
+
+```bash
+#!/bin/bash
+echo "Running tests..."
+
+exit 0
+```
+
+---
+
+## Workflow to Run Script
+
+```yaml
+name: Run Tests
+
+on: push
+
+jobs:
+  test-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run test script
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "Main branch push"
-          else
-            echo "Feature branch push"
-          fi
-
-      - name: Print commit message
-        run: echo "Commit message: ${{ github.event.head_commit.message }}"
+          chmod +x scripts/test.sh
+          ./scripts/test.sh
 ```
 
-### Pipeline Execution
+Explanation:
 
 ```
-        push
-          │
-    ┌─────┴─────┐
-    │           │
-  lint        test
-    │           │
-    └─────┬─────┘
-          │
-       summary
+actions/checkout
 ```
 
-**lint and test jobs run in parallel.**
+Downloads the repository code to the runner.
 
-The **summary job waits for both jobs to finish** using:
+Then the script is executed.
+
+---
+
+## Testing Pipeline Failure
+
+Modify the script:
 
 ```
-needs: [lint, test]
+exit 1
 ```
 
-The summary job prints:
+This causes the pipeline to fail.
 
-* Whether the push was on the main branch or a feature branch
-* The commit message that triggered the pipeline
+GitHub will mark the workflow as:
+
+```
+FAILED (red)
+```
+
+After fixing the script:
+
+```
+exit 0
+```
+
+The pipeline becomes:
+
+```
+SUCCESS (green)
+```
+
+---
+
+# 6. Caching Dependencies
+
+Installing dependencies repeatedly slows CI pipelines.
+
+Caching stores dependencies so future runs are faster.
+
+Example dependencies:
+
+* npm packages
+* Python libraries
+* Maven dependencies
+
+---
+
+## Cache Example
+
+```yaml
+name: Dependency Cache
+
+on: push
+
+jobs:
+  cache-demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm install
+```
+
+---
+
+## How Caching Works
+
+First run:
+
+```
+No cache found
+Install dependencies
+Save cache
+```
+
+Second run:
+
+```
+Cache restored
+Skip downloading packages
+Pipeline runs faster
+```
+
+---
+
+## Where Cache Is Stored
+
+GitHub stores the cache in its own infrastructure.
+
+The cache is linked to:
+
+```
+repository
+workflow
+cache key
+```
 
 ---
 
 # Key Concepts Learned
 
-* Workflows can contain multiple jobs.
-* Jobs contain steps.
-* `needs:` controls job dependencies.
-* Environment variables allow sharing configuration values.
-* Outputs allow passing data between jobs.
-* Conditionals allow pipelines to run only when certain conditions are met.
+Today I learned several critical CI/CD concepts:
+
+* **Secrets** securely store sensitive credentials.
+* Secrets are accessed using `${{ secrets.SECRET_NAME }}`.
+* **Artifacts** store files generated during workflows.
+* Artifacts can also transfer files between jobs.
+* CI pipelines can run real scripts and detect failures.
+* **Caching** improves pipeline speed by storing dependencies.
 
 ---
 
 # Conclusion
 
-Today I learned how to design a smarter CI/CD pipeline by controlling job order, sharing data between jobs, and running steps conditionally.
-These features are essential for building production-grade DevOps pipelines.
+Day 44 introduced important CI/CD features used in real DevOps pipelines.
+
+Secrets ensure secure handling of credentials, artifacts allow build outputs to be stored and shared, and caching improves performance. Running real tests ensures code reliability before deployment.

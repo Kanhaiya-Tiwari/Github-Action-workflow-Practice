@@ -1,18 +1,16 @@
 name: Conditional Workflow
 
 on:
+  workflow_dispatch:
   push:
-  pull_request:
 
 jobs:
-
   example:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Step only on main branch
-        if: github.ref == 'refs/heads/main'
+        if: ${{ github.ref == 'refs/heads/main' }}
         run: echo "This runs only on main branch"
 
       - name: Step that fails
@@ -21,13 +19,12 @@ jobs:
         continue-on-error: true
 
       - name: Run if previous step failed
-        if: failure()
+        if: ${{ steps.fail_step.outcome == 'failure' }}
         run: echo "Previous step failed"
-        
 
   push-only-job:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: ${{ github.event_name == 'push' }}
 
     steps:
       - run: echo "This job runs only on push events"
