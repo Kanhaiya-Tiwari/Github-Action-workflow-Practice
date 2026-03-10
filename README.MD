@@ -15,8 +15,6 @@ Today I learned how to:
 
 These features are essential for real-world CI/CD pipelines.
 
----
-
 # 1. GitHub Secrets
 
 CI pipelines often require sensitive data such as:
