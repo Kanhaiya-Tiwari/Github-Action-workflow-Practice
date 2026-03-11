@@ -30,8 +30,6 @@ GitHub solves this problem using **Secrets**.
 
 Secrets are encrypted values stored in the repository settings and accessed securely inside workflows.
 
----
-
 ## Creating a Secret
 
 Steps:
