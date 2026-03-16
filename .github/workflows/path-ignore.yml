@@ -1,0 +1,14 @@
+name: Smart Triggers
+
+on:
+  push:
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+
+jobs:
+  run-if-code-changed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo "Code change detected"
