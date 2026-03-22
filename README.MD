@@ -492,7 +492,6 @@ GitHub stores the cache in its own infrastructure.
 
 The cache is linked to:
 
-```
 repository
 workflow
 cache key
