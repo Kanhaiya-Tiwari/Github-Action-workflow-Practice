@@ -1,1 +1,1 @@
-this is simple github action project 
+this is simple github action workflow
